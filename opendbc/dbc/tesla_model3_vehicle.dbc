@@ -241,6 +241,23 @@ BO_ 1034 SeatBeltStatus: 8 XXX
 
 CM_ BO_ 1034 "2026+ Model Y (Juniper) only";
 
+BO_ 777 DAS_object: 8 VEH
+ SG_ DAS_objectId M: 0|3@1+ (1,0) [0|5] "" XXX
+ SG_ DAS_leadVehType m0: 3|3@1+ (1,0) [0|6] "" XXX
+ SG_ DAS_leadVehRelevantForControl m0: 7|1@1+ (1,0) [0|1] "" XXX
+ SG_ DAS_leadVehDx m0: 8|8@1+ (0.5,0) [0|127] "m" XXX
+ SG_ DAS_leadVehVxRel m0: 16|4@1+ (4,-30) [-30|26] "m/s" XXX
+ SG_ DAS_leadVehDy m0: 20|7@1+ (0.35,-22.05) [-22.05|22.4] "m" XXX
+ SG_ DAS_leadVehId m0: 27|7@1+ (1,0) [0|127] "" XXX
+ SG_ DAS_cutinVehType m3: 3|3@1+ (1,0) [0|5] "" XXX
+ SG_ DAS_cutinVehRelevantForControl m3: 7|1@1+ (1,0) [0|1] "" XXX
+ SG_ DAS_cutinVehDx m3: 8|8@1+ (0.5,0) [0|127] "m" XXX
+ SG_ DAS_cutinVehVxRel m3: 16|4@1+ (4,-30) [-30|26] "m/s" XXX
+ SG_ DAS_cutinVehDy m3: 20|7@1+ (0.35,-22.05) [-22.05|22.4] "m" XXX
+ SG_ DAS_cutinVehId m3: 27|7@1+ (1,0) [0|127] "" XXX
+
+CM_ BO_ 777 "Tesla vision objects, multiplexed by DAS_objectId. Layout from the community Model 3 DBC (older firmware), unverified on 2026+ Model Y (Juniper)";
+
 BO_ 851 UI_status: 8 VehicleBus
  SG_ UI_touchActive : 0|1@1+ (1,0) [0|1] ""  VehicleBus
  SG_ UI_audioActive : 1|1@1+ (1,0) [0|1] ""  VehicleBus
@@ -328,6 +345,15 @@ VAL_ 1013 VCFRONT_switchLightingBrightness 255 "SNA" ;
 VAL_ 1013 VCFRONT_turnSignalLeftStatus 2 "LIGHT_FAULT" 0 "LIGHT_OFF" 1 "LIGHT_ON" 3 "LIGHT_SNA" ;
 VAL_ 1013 VCFRONT_turnSignalRightStatus 2 "LIGHT_FAULT" 0 "LIGHT_OFF" 1 "LIGHT_ON" 3 "LIGHT_SNA" ;
 VAL_ 1034 driverBuckleStatus 1 "LATCHED" 0 "UNLATCHED" ;
+VAL_ 777 DAS_objectId 0 "LEAD_VEHICLES" 1 "LEFT_VEHICLES" 2 "RIGHT_VEHICLES" 3 "CUTIN_VEHICLE" 4 "ROAD_SIGN" 5 "VEHICLE_HEADINGS" ;
+VAL_ 777 DAS_leadVehType 0 "UNKNOWN" 1 "TRUCK" 2 "CAR" 3 "MOTORCYCLE" 4 "BICYCLE" 5 "PEDESTRIAN" 6 "IPSO" ;
+VAL_ 777 DAS_leadVehDx 255 "SNA" ;
+VAL_ 777 DAS_leadVehVxRel 15 "SNA" ;
+VAL_ 777 DAS_leadVehId 127 "SNA" ;
+VAL_ 777 DAS_cutinVehType 0 "UNKNOWN" 1 "TRUCK" 2 "CAR" 3 "MOTORCYCLE" 4 "BICYCLE" 5 "PEDESTRIAN" ;
+VAL_ 777 DAS_cutinVehDx 255 "SNA" ;
+VAL_ 777 DAS_cutinVehVxRel 15 "SNA" ;
+VAL_ 777 DAS_cutinVehId 127 "SNA" ;
 VAL_ 962 VCLEFT_frontBuckleSwitch 2 "SWITCH_ON" 0 "SWITCH_SNA" 3 "SWITCH_FAULT" 1 "SWITCH_OFF";
 VAL_ 962 VCLEFT_frontSeatTrackBack 2 "SWITCH_ON" 0 "SWITCH_SNA" 3 "SWITCH_FAULT" 1 "SWITCH_OFF";
 VAL_ 962 VCLEFT_rightMirrorTilt 4 "MIRROR_TILT_LEFT" 2 "MIRROR_TILT_UP" 3 "MIRROR_TILT_RIGHT" 0 "MIRROR_TILT_STOP" 1 "MIRROR_TILT_DOWN";

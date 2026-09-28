@@ -1,10 +1,20 @@
 from opendbc.can import CANParser
 from opendbc.car import Bus, structs
 from opendbc.car.interfaces import RadarInterfaceBase
-from opendbc.car.tesla.values import DBC
+from opendbc.car.tesla.values import CANBUS, DAS_CUTIN_TRACK_ID_BASE, DBC, TeslaFlags
 
 RADAR_START_ADDR = 0x410
 RADAR_MSG_COUNT = 80  # 40 points * 2 messages each
+
+# DAS_object (0x309) is Tesla's own vision object list on the VEHICLE bus, multiplexed by DAS_objectId.
+# Its lead and cut-in slots go out as points that radard only uses to confirm the model's leads.
+# The layout is from the community Model 3 DBC and unverified on 2026+ Model Y.
+DAS_OBJECT_SIGNAL_PREFIX = {0: "DAS_leadVeh", 3: "DAS_cutinVeh"}
+DAS_TRACK_ID_BASE = {0: 0, 3: DAS_CUTIN_TRACK_ID_BASE}
+DAS_DX_SNA = 127.5      # m, raw 255
+DAS_VX_REL_SNA = 30.0   # m/s, raw 15
+DAS_ID_SNA = 127
+DAS_POINT_TIMEOUT = 50  # update() calls, 0.5 s at card's 100 Hz
 
 
 def get_radar_can_parser(CP):
@@ -21,6 +31,14 @@ def get_radar_can_parser(CP):
   return CANParser(DBC[CP.carFingerprint][Bus.radar], messages, 1)
 
 
+def get_das_can_parser(CP):
+  if not CP.flags & TeslaFlags.HW4_GEN2_VEHICLE_BUS:
+    return None
+
+  # nan frequency turns the alive check off: a firmware without DAS_object must not raise CAN errors
+  return CANParser(DBC[CP.carFingerprint][Bus.adas], [("DAS_object", float("nan"))], CANBUS.vehicle)
+
+
 class RadarInterface(RadarInterfaceBase):
   def __init__(self, CP, CP_SP):
     super().__init__(CP, CP_SP)
@@ -30,7 +48,13 @@ class RadarInterface(RadarInterfaceBase):
     self.radar_off_can = CP.radarUnavailable
     self.rcp = get_radar_can_parser(CP)
 
+    self.das_cp = get_das_can_parser(CP)
+    self.das_objects: dict[int, tuple[int, int, float, float, float]] = {}  # objectId: (frame, trackId, dRel, yRel, vRel)
+
   def update(self, can_strings):
+    if self.das_cp is not None:
+      return self._update_das(self.das_cp, can_strings)
+
     if self.radar_off_can or self.rcp is None:
       return super().update(None)
 
@@ -44,6 +68,42 @@ class RadarInterface(RadarInterfaceBase):
     self.updated_messages.clear()
 
     return rr
+
+  def _update_das(self, das_cp, can_strings):
+    self.frame += 1
+    das_cp.update(can_strings)
+
+    frames = das_cp.vl_all["DAS_object"]
+    for i, object_id in enumerate(frames["DAS_objectId"]):
+      object_id = int(object_id)
+      prefix = DAS_OBJECT_SIGNAL_PREFIX.get(object_id)
+      if prefix is None:
+        continue
+
+      d_rel = frames[f"{prefix}Dx"][i]
+      v_rel = frames[f"{prefix}VxRel"][i]
+      veh_id = int(frames[f"{prefix}Id"][i])
+      if d_rel < DAS_DX_SNA and v_rel < DAS_VX_REL_SNA and veh_id != DAS_ID_SNA and frames[f"{prefix}RelevantForControl"][i] == 1:
+        # DAS Dy is taken as positive to the left (ISO 8855); yRel is positive to the right
+        self.das_objects[object_id] = (self.frame, DAS_TRACK_ID_BASE[object_id] + veh_id, d_rel, -frames[f"{prefix}Dy"][i], v_rel)
+      else:
+        self.das_objects.pop(object_id, None)
+
+    if self.frame % 5 != 0:  # 20 Hz, like RadarInterfaceBase
+      return None
+
+    ret = structs.RadarData()
+    points = []
+    for frame, track_id, d_rel, y_rel, v_rel in self.das_objects.values():
+      if self.frame - frame < DAS_POINT_TIMEOUT:
+        pt = structs.RadarData.RadarPoint()
+        pt.trackId = track_id
+        pt.dRel = d_rel
+        pt.yRel = y_rel
+        pt.vRel = v_rel
+        points.append(pt)
+    ret.points = points
+    return ret
 
   def _update(self, updated_messages):
     ret = structs.RadarData()

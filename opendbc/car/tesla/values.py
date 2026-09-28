@@ -139,6 +139,10 @@ class CANBUS:
   autopilot_party = 2
 
 
+# radar_interface.py publishes DAS_object's cut-in slot from this trackId up, so radard can tell it from the lead slot
+DAS_CUTIN_TRACK_ID_BASE = 128
+
+
 GEAR_MAP = {
   "DI_GEAR_INVALID": CarState.GearShifter.unknown,
   "DI_GEAR_P": CarState.GearShifter.park,
