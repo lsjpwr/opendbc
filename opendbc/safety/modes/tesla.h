@@ -172,10 +172,14 @@ static void tesla_rx_hook(const CANPacket_t *msg) {
 
     // Cruise and Summon state
     if (msg->addr == 0x286U) {
-      // Summon state
-      int autopark_state = (msg->data[3] >> 1) & 0x0FU;  // DI_autoparkState (used by Summon, not actually used by autopark)
-      bool tesla_summon_now = (autopark_state == 3) ||  // ACTIVE
+      // Summon state. The 2026+ Model Y reports Autopark here too. STARTED, PAUSED and RESUMED are part of
+      // the maneuver, so stock keeps control through a pause
+      int autopark_state = (msg->data[3] >> 1) & 0x0FU;  // DI_autoparkState
+      bool tesla_summon_now = (autopark_state == 2) ||  // STARTED
+                                (autopark_state == 3) ||  // ACTIVE
                                 (autopark_state == 4) ||  // COMPLETE
+                                (autopark_state == 5) ||  // PAUSED
+                                (autopark_state == 7) ||  // RESUMED
                                 (autopark_state == 9);    // SELFPARK_STARTED
 
       // Only consider rising edges while controls are not allowed

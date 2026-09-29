@@ -29,7 +29,7 @@ class CarState(CarStateBase, CarStateExt):
     self.das_control = None
 
   def update_summon_state(self, summon_state: str, cruise_enabled: bool):
-    summon_now = summon_state in ("ACTIVE", "COMPLETE", "SELFPARK_STARTED")
+    summon_now = summon_state in ("STARTED", "ACTIVE", "COMPLETE", "PAUSED", "RESUMED", "SELFPARK_STARTED")
     if summon_now and not self.summon_prev and not self.cruise_enabled_prev:
       self.summon = True
     if not summon_now:
@@ -87,7 +87,7 @@ class CarState(CarStateBase, CarStateExt):
     cruise_state = self.can_define.dv["DI_state"]["DI_cruiseState"].get(int(cp_party.vl["DI_state"]["DI_cruiseState"]), None)
     speed_units = self.can_define.dv["DI_state"]["DI_speedUnits"].get(int(cp_party.vl["DI_state"]["DI_speedUnits"]), None)
 
-    # DI_autoparkState is used by Summon, not autopark (which uses DAS_autopilotState = ACTIVE_AUTOPARK)
+    # DI_autoparkState is used by Summon, and by Autopark on the 2026+ Model Y (older cars use DAS_autopilotState = ACTIVE_AUTOPARK)
     summon_state = self.can_define.dv["DI_state"]["DI_autoparkState"].get(int(cp_party.vl["DI_state"]["DI_autoparkState"]), None)
     cruise_enabled = cruise_state in ("ENABLED", "STANDSTILL", "OVERRIDE", "PRE_FAULT", "PRE_CANCEL")
     self.cruise_override = cruise_state in ("OVERRIDE")

@@ -4,6 +4,7 @@ import unittest
 from opendbc.car import gen_empty_fingerprint
 from opendbc.car.structs import CarParams
 from opendbc.car.tesla.interface import CarInterface
+from opendbc.car.tesla.carstate import CarState
 from opendbc.car.tesla.fingerprints import FW_VERSIONS
 from opendbc.car.tesla.radar_interface import RADAR_START_ADDR
 from opendbc.car.tesla.values import CANBUS, CAR, LEGACY_DAS_STEERING_FW, TeslaFlags, TeslaSafetyFlags
@@ -105,3 +106,22 @@ class TestTeslaFingerprint(unittest.TestCase):
         fingerprint[1][RADAR_START_ADDR] = 8
       CP = CarInterface.get_params(CAR.TESLA_MODEL_X, fingerprint, [], False, False, False)
       assert CP.radarUnavailable  # Always unavailable since no radar DBC
+
+
+class TestTeslaSummonState(unittest.TestCase):
+  def setUp(self):
+    # update_summon_state only uses these fields
+    self.cs = CarState.__new__(CarState)
+    self.cs.summon = self.cs.summon_prev = self.cs.cruise_enabled_prev = False
+
+  def test_stock_keeps_control_through_a_paused_maneuver(self):
+    for state in ("STARTED", "ACTIVE", "PAUSED", "RESUMED", "ACTIVE", "COMPLETE"):
+      self.cs.update_summon_state(state, False)
+      self.assertTrue(self.cs.summon, state)
+    self.cs.update_summon_state("ABORTED", False)
+    self.assertFalse(self.cs.summon)
+
+  def test_maneuver_starting_while_engaged_is_ignored(self):
+    self.cs.update_summon_state("STANDBY", True)
+    self.cs.update_summon_state("STARTED", True)
+    self.assertFalse(self.cs.summon)
