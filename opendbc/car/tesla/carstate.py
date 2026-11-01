@@ -1,7 +1,6 @@
 import copy
 from opendbc.can import CANDefine, CANParser
 from opendbc.car import Bus, create_button_events, structs
-from opendbc.car.carlog import carlog
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.interfaces import CarStateBase
 from opendbc.car.tesla.values import DBC, CANBUS, GEAR_MAP, STEER_DISENGAGE_THRESHOLD, STEER_THRESHOLD, TeslaFlags
@@ -165,11 +164,6 @@ class CarState(CarStateBase, CarStateExt):
       # HW4 gen2 sends DAS_settings on the party bus instead of the autopilot party bus
       cp_das_settings = cp_party if self.CP.flags & TeslaFlags.HW4_GEN2 else cp_ap_party
       ret.invalidLkasSetting = cp_das_settings.vl["DAS_settings"]["DAS_autosteerEnabled"] != 0
-
-      # Because we don't have FSD 14 detection outside of a set of FW, we should check if this FW is accidentally missing from FSD_14_FW
-      # 1. If in Autosteer or FSD, already caught by invalidLkasSetting
-      # 2. If in TACC and DAS ever sends ANGLE_CONTROL (1), we can infer it's trying to do LKAS on FSD 14+
-      angle_control = cp_ap_party.vl["DAS_steeringControl"]["DAS_steeringControlType"] == 1  # ANGLE_CONTROL
 
     # Buttons # ToDo: add Gap adjust button
 

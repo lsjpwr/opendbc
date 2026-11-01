@@ -4,8 +4,12 @@ import unittest
 import numpy as np
 
 from opendbc.car.lateral import get_max_angle_delta_vm, get_max_angle_vm
-from opendbc.car.tesla.values import CANBUS, CarControllerParams, STEER_DISENGAGE_THRESHOLD, TeslaSafetyFlags, TeslaFlags
+from opendbc.car import Bus, gen_empty_fingerprint
+from opendbc.car.tesla.values import CANBUS, CAR, CarControllerParams, STEER_DISENGAGE_THRESHOLD, TeslaSafetyFlags
 from opendbc.car.tesla.carcontroller import get_safety_CP
+from opendbc.car.tesla.interface import CarInterface
+from opendbc.car.tesla.carstate import CarState
+from opendbc.car.tesla.teslacan import TeslaCAN
 from opendbc.car.structs import CarParams
 from opendbc.car.vehicle_model import VehicleModel
 from opendbc.can import CANDefine
@@ -495,6 +499,15 @@ class TestTeslaIgnition(unittest.TestCase):
                                            {"DI_systemStatusCounter": counter,
                                             "DI_gear": gear})
 
+  def test_lv_power_wakes_without_starting_ignition(self):
+    for state in (1, 2, 3, 0):
+      for counter in (0, 1):
+        self.safety.ignition_can_hook(self.packer.make_can_msg_safety("VCFRONT_LVPowerState", 0, {
+          "VCFRONT_LVPowerStateCounter": counter, "VCFRONT_vehiclePowerState": state,
+        }))
+      self.assertEqual(self.safety.get_wake_on_can(), state != 0)
+      self.assertFalse(self.safety.get_ignition_can())
+
   def _ui_msg(self, counter, buckled, door_open):
     return self.packer.make_can_msg_safety("UI_warning", 0,
                                            {"UI_warningCounter": counter,
@@ -579,6 +592,9 @@ class TestTeslaVehicleBusSafety(TestTeslaSafetyBase):
     values = {"UI_activeTouchPoints": 3 if enabled else 0}
     return self.packer_adas.make_can_msg_safety("UI_status2", CANBUS.vehicle, values)
 
+  def _ignore_frequency_check_msgs(self):
+    return [self._lkas_button_msg(False)]
+
   def _set_mads_screen_button_config(self, finger_flag):
     param_sp = TeslaSafetyFlagsSP.HAS_VEHICLE_BUS
     if finger_flag is not None:
@@ -612,6 +628,40 @@ class TestTeslaVehicleBusSafety(TestTeslaSafetyBase):
       with self.subTest(actual=actual):
         self._rx(self._touch_points_msg(actual))
         self.assertEqual(-1, self.safety.get_mads_button_press())  # UNAVAILABLE
+
+
+class TestTeslaInterfaceSafety(common.SafetyTestBase):
+  DBC = "tesla_model3_party"
+  SAFETY_MODEL = CarParams.SafetyModel.tesla
+
+  def test_firmware_to_can_and_safety_contract(self):
+    cases = [
+      (CAR.TESLA_MODEL_3, b'TeM3_E014p10_0.0.0 (16),E014.17.00', False, 2, 1),
+      (CAR.TESLA_MODEL_3, b'TeMYG4_Main_0.0.0 (87),E4L015.09.3', False, 0, 0),
+      (CAR.TESLA_MODEL_Y, b'\x01\x0113\x04\x00\x01\x00\x00\x01\x01\x00\x00\x00\x00\x00\x00\xff\xff', True, 4, 0),
+    ]
+    for car, firmware, hw4_gen2, param, shift in cases:
+      for longitudinal in (False, True):
+        with self.subTest(car=car, firmware=firmware, longitudinal=longitudinal):
+          fingerprint = gen_empty_fingerprint()
+          fingerprint[CANBUS.autopilot_party][0x399 if hw4_gen2 else 0x293] = 8
+          car_fw = [CarParams.CarFw(ecu=CarParams.Ecu.eps, fwVersion=firmware)]
+          CP = CarInterface.get_params(car, fingerprint, car_fw, longitudinal, False, False)
+          CP_SP = CarInterface.get_params_sp(CP, car, fingerprint, car_fw, longitudinal, False, False)
+          self.assertFalse(CP.dashcamOnly)
+          self.assertEqual(CP.safetyConfigs[0].safetyParam, param | int(longitudinal))
+          self.safety.set_safety_hooks(self.SAFETY_MODEL, CP.safetyConfigs[0].safetyParam)
+          self.safety.init_tests()
+          self.safety.set_controls_allowed(True)
+          can = TeslaCAN(CP, self.packer)
+          state = CarState(CP, CP_SP)
+          parsers = state.get_can_parsers(CP, CP_SP)
+          for control_type in (0, 1, 2, 3):
+            address, data, bus = can.create_steering_control(0, control_type != 0, control_type)
+            self.assertEqual(data[2] >> 5, control_type << shift)
+            self.assertEqual(self._tx(libsafety_py.make_CANPacket(address, bus, data)), control_type != 3)
+            parsers[Bus.ap_party].update([(0, [(address, data, CANBUS.autopilot_party)])])
+            self.assertEqual(state.update(parsers)[0].stockLkas, control_type == 2)
 
 
 if __name__ == "__main__":

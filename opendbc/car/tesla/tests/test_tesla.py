@@ -7,7 +7,7 @@ from opendbc.car.tesla.interface import CarInterface
 from opendbc.car.tesla.carstate import CarState
 from opendbc.car.tesla.fingerprints import FW_VERSIONS
 from opendbc.car.tesla.radar_interface import RADAR_START_ADDR
-from opendbc.car.tesla.values import CANBUS, CAR, LEGACY_DAS_STEERING_FW, TeslaFlags, TeslaSafetyFlags
+from opendbc.car.tesla.values import CANBUS, CAR, FW_QUERY_CONFIG, LEGACY_DAS_STEERING_FW, TeslaFlags, TeslaSafetyFlags
 
 Ecu = CarParams.Ecu
 
@@ -37,7 +37,7 @@ Ecu = CarParams.Ecu
 FW_RE = re.compile(
   rb'^(?P<unknown_prefix>.+),' +
   rb'(?P<platform>[EYX])' +
-  rb'(?P<variant_code>\d?[A-Z]*\d{3})' +
+  rb'(?P<variant_code>\d?[A-Z]*(?:\.[A-Z]\d+\.)?\d{3})' +
   rb'\.(?P<software_major>\d+)' +
   rb'(?:\.(?P<software_minor>\d+))?$'
 )
@@ -54,10 +54,20 @@ class TestTeslaFingerprint(unittest.TestCase):
     # Every EPS FW must parse and its platform letter must match the car it's filed under.
     for car_model, ecus in FW_VERSIONS.items():
       for fw in ecus.get((Ecu.eps, 0x730, None), []):
+        if fw.startswith(b'\x01\x01'):
+          self.assertEqual(car_model, CAR.TESLA_MODEL_Y)
+          self.assertEqual(len(fw), 19)
+          continue
         m = FW_RE.match(fw)
 
         assert m is not None, f"Unparsable FW: {fw}"
         assert PLATFORM_TO_CAR[m['platform']] == car_model, f"Platform letter {m['platform']!r} != {car_model.value}: {fw}"
+
+  def test_query_accepts_all_known_eps_firmware(self):
+    for ecus in FW_VERSIONS.values():
+      for fw in ecus.get((Ecu.eps, 0x730, None), []):
+        with self.subTest(fw=fw):
+          self.assertIsNotNone(re.fullmatch(FW_QUERY_CONFIG.fw_version_regex, fw))
 
   def test_legacy_das_steering_fw(self):
     # Ensure all legacy FW strings are present in FW_VERSIONS

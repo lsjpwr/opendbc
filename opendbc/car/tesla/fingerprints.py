@@ -28,6 +28,10 @@ FW_VERSIONS = {
       b'TeMYG4_SingleECU_0.0.0 (33),E4S014.27',
       b'TeMYG4_Main_0.0.0 (78),E4H015.05.0',
       b'TeMYG4_Main_0.0.0 (78),E4015.06.0',
+      b'TeMYG4_Main_0.0.0 (87),E4L015.09.3',
+      b'TeMYG4_Main_0.0.0 (87),E4H015.08.3',
+      b'TeMYG4_Main_0.0.0 (92),E4H015.09.2',
+      b'TeMYG4_Main_0.0.0 (92),E4L015.10.2',
     ],
   },
   CAR.TESLA_MODEL_Y: {
@@ -48,10 +52,12 @@ FW_VERSIONS = {
       b'TeMYG4_Legacy3Y_0.0.0 (6),Y4003.04.0',
       b'TeMYG4_Main_0.0.0 (77),Y4003.05.4',
       b'TeMYG4_Main_0.0.0 (78),Y4003.06.0',
+      b'TeMYG4_Main_0.0.0 (78),Y4OC003.08.1',
       b'TeMYG4_SingleECU_0.0.0 (28),Y4S002.23.0',
       b'TeMYG4_SingleECU_0.0.0 (33),Y4S002.26',
       b'\x01\x0113\x04\x00\x01\x00\x00\x01\x01\x00\x00\x00\x00\x00\x00\xff\xff',
       b'TeMYG4_Main_0.0.0 (78),Y4OC.E80.003.07.0',
+      b'TeMYG4_Main_0.0.0 (87),Y4003.09.3',
     ],
   },
   CAR.TESLA_MODEL_X: {
