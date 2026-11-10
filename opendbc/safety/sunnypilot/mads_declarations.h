@@ -7,6 +7,9 @@
 
 #pragma once
 
+#include <stdbool.h>
+#include <stdint.h>
+
 // ===============================
 // Type Definitions and Enums
 // ===============================
@@ -65,6 +68,7 @@ typedef struct {
   bool previous : 1;
 } BinaryStateTracking;
 
+// dynamic state, in SafetyState: the dual computation runs it on both copies, reset on safety mode init
 typedef struct {
   bool is_vehicle_moving : 1;
 
@@ -76,24 +80,15 @@ typedef struct {
 
   DisengageState current_disengage;
 
-  bool system_enabled : 1;
-  bool disengage_lateral_on_brake : 1;
-  bool pause_lateral_on_brake : 1;
   bool controls_requested_lateral : 1;
 } MADSState;
 
-// ===============================
-// Global Variables
-// ===============================
-
-extern ButtonState mads_button_press;
-extern MADSState m_mads_state;
-
-extern bool controls_allowed_lateral;
-
-// state for mads controls_allowed_lateral timeout logic
-extern bool heartbeat_engaged_mads;
-extern uint32_t heartbeat_engaged_mads_mismatches;
+// settings from the alternative experience, in SafetySetup: kept across safety mode changes
+typedef struct {
+  bool system_enabled;
+  bool disengage_lateral_on_brake;
+  bool pause_lateral_on_brake;
+} MADSSetup;
 
 // ===============================
 // External Function Declarations (kept as needed)

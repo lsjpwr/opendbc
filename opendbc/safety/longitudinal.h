@@ -1,7 +1,7 @@
 #include "opendbc/safety/declarations.h"
 
 bool get_longitudinal_allowed(void) {
-  return controls_allowed;
+  return safety.controls_allowed;
 }
 
 // Safety checks for longitudinal actuation

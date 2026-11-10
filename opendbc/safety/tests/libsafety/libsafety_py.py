@@ -43,6 +43,8 @@ def _build_libsafety(release: bool = False) -> str:
 def cdef_from_file(path: Path) -> str:
   source = path.read_text()
   source = re.sub(r"//[^\n]*|/\*.*?\*/", "", source, flags=re.DOTALL)
+  # sunnypilot: cffi has no packed enums, the MADS ones are one byte in the safety state
+  source = re.sub(r"typedef enum __attribute__\(\(packed\)\) \{[^}]*\} (\w+);", r"typedef int8_t \1;", source)
   source = re.sub(r"__attribute__\(\(.*\)\)", "", source)
 
   # Keep integer constants, type declarations, and function signatures, including definitions.
@@ -55,7 +57,7 @@ def cdef_from_file(path: Path) -> str:
 ffi = FFI()
 safety_dir = Path(libsafety_dir).parents[1]
 ffi.cdef(cdef_from_file(safety_dir / "can.h"), packed=True)
-for path in (safety_dir / "declarations.h", safety_dir / "ignition.h", safety_dir / "sunnypilot" / "mads_declarations.h", Path(libsafety_dir) / "safety.c"):
+for path in (safety_dir / "sunnypilot" / "mads_declarations.h", safety_dir / "declarations.h", safety_dir / "ignition.h", Path(libsafety_dir) / "safety.c"):
   ffi.cdef(cdef_from_file(path))
 
 class CANPacket:
@@ -73,6 +75,8 @@ int get_temp_debug(void);
 void mutation_set_active_mutant(int id);
 int mutation_get_active_mutant(void);
 """)
+
+ffi.cdef("extern SafetyCopy safety_a; extern SafetyCopy safety_b; extern bool safety_redundancy_fault;")
 
 class LibSafety:
   pass
