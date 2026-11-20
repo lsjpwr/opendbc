@@ -67,7 +67,7 @@ class TestSafetyFramework(common.SafetyTestBase):
     self.assertFalse(self.safety.safety_tx_hook(common.make_msg(0, 0x123)))
 
 
-class TestSafetyRedundancy(common.SafetyTestBase):
+class SafetyRedundancyBase(common.SafetyTestBase):
   SAFETY_MODEL = CarParams.SafetyModel.allOutput
 
   def _flip_b(self, bit):
@@ -79,6 +79,8 @@ class TestSafetyRedundancy(common.SafetyTestBase):
     self.assertEqual(common.state_buffer("safety_a")[:], common.state_buffer("safety_b")[:])
     self.safety.safety_redundancy_fault = False
 
+
+class TestSafetyRedundancy(SafetyRedundancyBase):
   def test_rx_decision_mismatch(self):
     # wrong counters in B fail its rx check, CLU11 is a hyundai rx check with a counter and no checksum
     self.safety.set_safety_hooks(CarParams.SafetyModel.hyundai, 0)
@@ -128,6 +130,116 @@ class TestSafetyRedundancy(common.SafetyTestBase):
         self.safety.set_controls_allowed(True)
         self.safety.safety_tx_hook(msg)
         self.assertEqual(ts_last(self.safety.safety_a.state), 1000002)
+
+
+class TestSafetyRedundancySP(SafetyRedundancyBase):
+  def test_mads_lateral_decision_mismatch(self):
+    # steering is allowed only with controls_allowed_lateral
+    self.safety.set_safety_hooks(CarParams.SafetyModel.hyundai, 0)
+    self.safety.set_mads_params(True, False, False)
+    self.safety.set_controls_allowed_lateral(True)
+    lkas = common.CANPackerSafety("hyundai_can_generated").make_can_msg_safety("LKAS11", 0, {"CR_Lkas_StrToqReq": 3, "CF_Lkas_ActToi": 1})
+    self._flip_b(ffi.offsetof("SafetyState", "controls_allowed_lateral") * 8)
+    self.assertTrue(self.safety.safety_tx_hook(lkas))
+    self._assert_fault()
+
+  def test_mads_heartbeat_both_copies(self):
+    # the panda's entry point, with controls_allowed off so only the MADS check acts
+    self.safety.set_controls_allowed(False)
+    self.safety.set_mads_params(True, False, False)
+    self.safety.set_controls_allowed_lateral(True)
+    self.safety.set_heartbeat_engaged_mads(False)
+    for _ in range(3):
+      self.assertTrue(self.safety.get_controls_allowed_lateral())
+      self.safety.safety_heartbeat_check()
+    self.assertFalse(self.safety.get_controls_allowed_lateral())
+    self.assertFalse(self.safety.safety_redundancy_fault)
+
+  @staticmethod
+  def _padding_masks(ctype):
+    # {byte offset: padding bits}, including unused bitfield bits
+    used = bytearray(ffi.sizeof(ctype))
+
+    def mark(t, base):
+      if t.kind == "struct":
+        for _, f in t.fields:
+          if f.bitsize >= 0:
+            for bit in range(f.bitshift, f.bitshift + f.bitsize):
+              used[base + f.offset + bit // 8] |= 1 << (bit % 8)
+          else:
+            mark(f.type, base + f.offset)
+      elif t.kind == "array":
+        for i in range(t.length):
+          mark(t.item, base + i * ffi.sizeof(t.item))
+      else:
+        used[base:base + ffi.sizeof(t)] = b"\xff" * ffi.sizeof(t)
+
+    mark(ffi.typeof(ctype), 0)
+    return {i: ~u & 0xFF for i, u in enumerate(used) if u != 0xFF}
+
+  def test_mode_change_clears_padding(self):
+    # the copies are compared by byte, so padding must match after a mode change
+    padding = self._padding_masks("SafetyState")
+    self.assertGreater(len(padding), 0)
+    state = ffi.offsetof("SafetyCopy", "state")
+    for copy, junk in (("safety_a", 0x5A), ("safety_b", 0xA5)):
+      buf = common.state_buffer(copy)
+      for i, mask in padding.items():
+        buf[state + i] = bytes([(buf[state + i][0] & ~mask) | (junk & mask)])
+
+    self.assertEqual(0, self.safety.set_safety_hooks_dirty_stack(CarParams.SafetyModel.hyundai, 0))
+    for copy in ("safety_a", "safety_b"):
+      buf = common.state_buffer(copy)
+      self.assertEqual({}, {i: buf[state + i][0] & mask for i, mask in padding.items() if buf[state + i][0] & mask})
+    self.safety.safety_tick()
+    self.assertFalse(self.safety.safety_redundancy_fault)
+
+  def test_init_tests_clears_fault(self):
+    self.safety.safety_redundancy_fault = True
+    self.safety.init_tests()
+    self.assertFalse(self.safety.safety_redundancy_fault)
+
+
+class TestMadsModeChange(common.SafetyTestBase):
+  SAFETY_MODEL = CarParams.SafetyModel.noOutput
+
+  def test_mads_flags_kept_across_mode_change(self):
+    for disengage_lateral_on_brake, pause_lateral_on_brake in ((True, False), (False, True)):
+      with self.subTest(disengage_lateral_on_brake=disengage_lateral_on_brake):
+        self.safety.set_mads_params(True, disengage_lateral_on_brake, pause_lateral_on_brake)
+        self.safety.set_safety_hooks(CarParams.SafetyModel.hyundai, 0)
+        self.assertTrue(self.safety.get_enable_mads())
+        self.assertEqual(disengage_lateral_on_brake, self.safety.get_disengage_lateral_on_brake())
+        self.assertEqual(pause_lateral_on_brake, self.safety.get_pause_lateral_on_brake())
+
+        self.safety.tick_mads_state(False, False, False, False, False)
+        self.safety.tick_mads_state(False, True, False, False, False)
+        self.assertTrue(self.safety.get_controls_allowed_lateral())
+
+  def test_mads_state_reset_on_mode_change(self):
+    # including into SILENT, which the panda enters when the heartbeat is lost
+    for mode in (CarParams.SafetyModel.hyundai, CarParams.SafetyModel.silent):
+      with self.subTest(mode=mode):
+        self.safety.set_mads_params(True, False, False)
+        self.safety.set_heartbeat_engaged_mads(True)
+        self.safety.set_controls_allowed(True)
+        self.safety.tick_mads_state(True, True, True, False, False)
+        self.assertTrue(self.safety.get_controls_allowed_lateral())
+        self.safety.set_controls_requested_lateral(True)
+        self.safety.set_mads_button_press(1)
+        self.safety.mads_set_current_disengage_reason(1)
+        for copy in (self.safety.safety_a, self.safety.safety_b):
+          copy.state.heartbeat_engaged_mads_mismatches = 2
+        self.safety.set_safety_hooks(mode, 0)
+        self.assertFalse(self.safety.get_controls_allowed())
+        self.assertFalse(self.safety.get_controls_allowed_lateral())
+        self.assertFalse(self.safety.get_controls_requested_lateral())
+        self.assertEqual(-1, self.safety.get_mads_button_press())
+        self.assertFalse(self.safety.get_mads_acc_main())
+        self.assertEqual(0, self.safety.mads_get_current_disengage_reason())
+        self.assertEqual(0, self.safety.safety_a.state.heartbeat_engaged_mads_mismatches)
+        # kept, like heartbeat_engaged
+        self.assertTrue(self.safety.safety_a.state.heartbeat_engaged_mads)
 
 
 class TestHeartbeat(common.SafetyTestBase):

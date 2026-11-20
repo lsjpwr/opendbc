@@ -373,6 +373,11 @@ void set_heartbeat_engaged_mads(bool c){
   safety_heartbeat_mads(c);
 }
 
+// without the controls_allowed check of safety_heartbeat_check
+void mads_heartbeat_check(void){
+  SAFETY_BOTH(mads_heartbeat_engaged_check());
+}
+
 void set_steering_disengage(bool c){
   SAFETY_SET(steering_disengage, c);
 }
@@ -398,6 +403,20 @@ int get_safety_setup_last_offset(void){
   return offsetof(SafetySetup, tesla_mads_screen_button_fingers);
 }
 
+// leaves junk on the stack for the next call
+void dirty_stack(void){
+  volatile uint8_t junk[4096];
+  for (int i = 0; i < 4096; i++) {
+    junk[i] = 0xA5U;
+  }
+  (void)junk[0];
+}
+
+int set_safety_hooks_dirty_stack(uint16_t mode, uint16_t param){
+  dirty_stack();
+  return set_safety_hooks(mode, param);
+}
+
 void init_tests(void){
   SAFETY_SET(safety_mode_cnt, 2U);  // avoid ignoring relay_malfunction logic
   safety_alternative_experience(0);
@@ -415,6 +434,8 @@ void init_tests(void){
   ignition_can_cnt = 0U;
   wake_on_can = false;
   wake_on_can_cnt = 0U;
+
+  safety_redundancy_fault = false;
 
   // reset MADS state to prevent leaking between tests
   SAFETY_BOTH(mads_set_system_state(false, false, false));

@@ -383,7 +383,6 @@ static int set_hooks_copy(uint16_t mode, uint16_t param) {
     .heartbeat_engaged_mismatches = safety.heartbeat_engaged_mismatches,
     // sunnypilot: MADS as after m_mads_state_init, its settings are in the setup and stay
     .heartbeat_engaged_mads = safety.heartbeat_engaged_mads,
-    .heartbeat_engaged_mads_mismatches = safety.heartbeat_engaged_mads_mismatches,
     .mads_button_press = MADS_BUTTON_UNAVAILABLE,
     .mads = {.mads_button = {.current = MADS_BUTTON_UNAVAILABLE, .last = MADS_BUTTON_UNAVAILABLE}},
   };
