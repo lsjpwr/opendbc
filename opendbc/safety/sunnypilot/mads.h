@@ -73,6 +73,7 @@ inline void m_update_control_state(void) {
       (safety.mads.mads_button.transition == MADS_EDGE_RISING) ||
       (safety.mads.op_controls_allowed.transition == MADS_EDGE_RISING)) {
     safety.mads.controls_requested_lateral = true;
+    safety.heartbeat_engaged_mads_mismatches = 0U;
   }
 
   // Primary control blockers - these prevent any further control processing
